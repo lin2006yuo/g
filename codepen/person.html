@@ -31,12 +31,8 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
-    <img
-      id="source"
-      src="./img/cat.jpg"
-      alt=""
-    />
-
+    <img id="source" src="./img/cat.jpg" alt="" />
+    <script src="../utils/m4.js"></script>
     <script>
       // Inspired by https://www.airtightinteractive.com/2011/06/rutt-etra-izer/
       "use strict"
@@ -56,28 +52,21 @@
               vertexShader,
               `
 precision highp float;
-const float FOV = 250.0;
+const float FOV = 1250.0;
 attribute vec3 aPosition, aColor;
 uniform vec2 uResolution;
 uniform vec4 uRotation;
+uniform mat4 uMatrix;
 varying vec3 color;
 void main() {
 // 3D Rotations
 float tx, ty, tz;
-tx = uRotation.z * aPosition.x - uRotation.w * aPosition.z;
-tz = uRotation.w * aPosition.x + uRotation.z * aPosition.z;
-ty = uRotation.x * aPosition.y - uRotation.y * tz;
-tz = uRotation.y * aPosition.y + uRotation.x * tz;
+tx = aPosition.x - aPosition.z;
+ty = aPosition.y + aPosition.z;
+tz = aPosition.x - aPosition.y;
+
 // 3D to 2D projection
-float s = FOV / (FOV - tz);
-float x = s > 0.0 ? tx * s : 0.0;
-float y = s > 0.0 ? ty * s : 0.0;
-gl_Position = vec4(
-( (uResolution.x * 0.5 + x) / uResolution.x * 2.0) - 1.0, 
-( (-uResolution.y * 0.5 -y) / uResolution.y * 2.0) + 1.0, 
-s > 0.0 ? 0.0 : 10.0,
-1.0
-);
+gl_Position = vec4(tx, ty, tz, 1.0) * uMatrix;
 color = aColor;
 }
       `
@@ -106,6 +95,8 @@ gl_FragColor = vec4(color.r, color.g, color.b, 1.0);
               "uResolution"
             )
             gl.enableVertexAttribArray(this.uResolution)
+            this.uMatrix = gl.getUniformLocation(this.program, "uMatrix")
+            gl.enableVertexAttribArray(this.uMatrix)
             // canvas resize
             this.resize()
             window.addEventListener("resize", () => this.resize(), false)
@@ -148,6 +139,7 @@ gl_FragColor = vec4(color.r, color.g, color.b, 1.0);
           init(canvas) {
             this.x = canvas.width * 0.5
             this.y = canvas.height * 0.5
+            this.scale = 1
             this.ex = this.x
             this.ey = this.y * 2
             ;["mousemove", "touchstart", "touchmove"].forEach(
@@ -168,6 +160,18 @@ gl_FragColor = vec4(color.r, color.g, color.b, 1.0);
                 )
               }
             )
+            document.addEventListener("mousewheel", (e) => {
+              var delta = e.wheelDeltaY != null ? e.wheelDeltaY : e.detail * -60
+              var scale = this.scale
+
+              if (delta > 0) {
+                scale *= 1.1
+              } else if (delta < 0) {
+                scale *= 1 / 1.1
+              }
+
+              this.scale = scale
+            })
           },
           ease(step) {
             this.ex += (this.x - this.ex) * step
@@ -193,6 +197,9 @@ gl_FragColor = vec4(color.r, color.g, color.b, 1.0);
         // rotation matrix
         const uRotation = gl.getUniformLocation(canvas.program, "uRotation")
         gl.enableVertexAttribArray(uRotation)
+        const uMatrix = gl.getUniformLocation(canvas.program, "uMatrix")
+        gl.enableVertexAttribArray(uMatrix)
+
         // init colors and geometry
         let nVertices = 0
         const load = (img) => {
@@ -236,26 +243,60 @@ gl_FragColor = vec4(color.r, color.g, color.b, 1.0);
           }
           // load buffers to gpu
           nVertices = Math.floor(colors.length / 3)
-          console.log({vertices})
+          console.log({ vertices })
           position.load(new Float32Array(vertices), gl.STATIC_DRAW, 3)
           color.load(new Float32Array(colors), gl.STATIC_DRAW, 3)
           // start animation loop
           requestAnimationFrame(run)
         }
+
+        function degToRad(d) {
+          return (d * Math.PI) / 180
+        }
+        var fieldOfViewRadians = degToRad(100)
+
+        var cameraPosition = [0, 1, 500]
         // main animation loop
-        const run = () => {
+        const run = (time) => {
           requestAnimationFrame(run)
+
+          time *= 0.0005
+
+          // -------------
+          var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight
+          var projectionMatrix = m4.perspective(
+            fieldOfViewRadians,
+            aspect,
+            1,
+            2000
+          )
+
+          var target = [0, 0, 0]
+          var up = [0, 0, 1]
+          var cameraMatrix = m4.lookAt(cameraPosition, target, up)
+          // Make a view matrix from the camera matrix.
+          var viewMatrix = m4.inverse(cameraMatrix)
+
+          var viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix)
+          // -------------- end
+
           pointer.ease(0.05)
+          let m_matrix
           // rotation
           const ry = (pointer.ex - canvas.width * 0.5) / (canvas.width * 0.33)
           const rx = (pointer.ey - canvas.height * 0.5) / (canvas.height * 0.33)
-          gl.uniform4f(
-            uRotation,
-            Math.cos(rx),
-            Math.sin(rx),
-            Math.cos(ry),
-            Math.sin(ry)
-          )
+          m_matrix = m4.translate(viewProjectionMatrix, rx, ry, 0)
+          // cameraPosition[2] += pointer.scale
+          // console.log(cameraPosition)
+          // viewProjectionMatrix
+          // gl.uniform4f(
+          //   uRotation,
+          //   Math.cos(rx),
+          //   Math.sin(rx),
+          //   Math.cos(ry),
+          //   Math.sin(ry)
+          // )
+          gl.uniformMatrix4fv(uMatrix, false, m_matrix)
           // draw line strip
           gl.drawArrays(gl.LINES, 0, nVertices)
         }
