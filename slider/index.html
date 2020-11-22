@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        align-content: center;
+        justify-content: center;
+      }
+      canvas {
+        width: 700px;
+        height: 450px;
+        display: block;
+      }
+      .buttons {
+        position: absolute;
+        top: 100px;
+        right: 100px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="buttons">
+      <button class="change-button">change</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script id="vertex-shader-2d" type="x-shader/x-vertex">
+      attribute vec2 a_position;
+      attribute vec2 a_texCoord;
+
+       varying vec2 v_texCoord;
+
+       uniform mat4 u_matrix;
+
+       void main() {
+         gl_Position = u_matrix * vec4((vec3(a_position, 1)).xy, 0, 1);
+         v_texCoord = a_texCoord;
+      }
+    </script>
+    <!-- fragment shader -->
+    <script id="fragment-shader-2d" type="x-shader/x-fragment">
+      precision mediump float;
+
+      uniform sampler2D u_image0;
+      uniform sampler2D u_image1;
+      float intensity = -0.3;
+      uniform float disFactor;
+
+      varying vec2 v_texCoord;
+
+      void main() {
+        vec4 color0 = texture2D(u_image0, v_texCoord);
+        vec4 color1 = texture2D(u_image1, v_texCoord);
+
+        vec4 image0 = texture2D(u_image0, vec2(v_texCoord.x, v_texCoord.y + disFactor * color1 * intensity));
+        vec4 image1 = texture2D(u_image1, vec2(v_texCoord.x, v_texCoord.y +  (1.0 - disFactor) * color0 * intensity));
+         gl_FragColor = mix(image0, image1, disFactor);
+      }
+    </script>
+    <script src="../../utils/webgl-utils.js"></script>
+    <script src="../../utils/m4.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/1.20.4/TweenMax.min.js"></script>
+  </body>
+
+  <script>
+    "use strict"
+
+    function loadImage(url, callback) {
+      var image = new Image()
+      requestCORSIfNotSameOrigin(image, url)
+      image.src = url
+      image.onload = callback
+      return image
+    }
+
+    function loadImages(urls, callback) {
+      var images = []
+      var imagesToLoad = urls.length
+
+      // Called each time an image finished
+      // loading.
+      var onImageLoad = function () {
+        --imagesToLoad
+        // If all the images are loaded call the callback.
+        if (imagesToLoad === 0) {
+          callback(images)
+        }
+      }
+
+      for (var ii = 0; ii < imagesToLoad; ++ii) {
+        var image = loadImage(urls[ii], onImageLoad)
+        images.push(image)
+      }
+    }
+
+    function main() {
+      // loadImages(["./img/leopard2.jpg", './img/leopard2.jpg'], render)
+      loadImages(["./img/evelynn1.jpg", "./img/evelynn2.jpg"], load)
+    }
+
+    var gl,
+      positionLocation,
+      texcoordLocation,
+      matrixLocation,
+      disFactorLocation
+    function load(images) {
+      // Get A WebGL context
+      /** @type {HTMLCanvasElement} */
+      var canvas = document.querySelector("#canvas")
+      gl = canvas.getContext("webgl")
+      if (!gl) {
+        return
+      }
+
+      webglUtils.resizeCanvasToDisplaySize(gl.canvas)
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
+
+      // setup GLSL program
+      var program = webglUtils.createProgramFromScripts(gl, [
+        "vertex-shader-2d",
+        "fragment-shader-2d",
+      ])
+
+      // look up where the vertex data needs to go.
+      positionLocation = gl.getAttribLocation(program, "a_position")
+      texcoordLocation = gl.getAttribLocation(program, "a_texCoord")
+      var u_imagesLocations = []
+      for (let i = 0; i < images.length; i++) {
+        u_imagesLocations.push(gl.getUniformLocation(program, `u_image${i}`))
+      }
+      // var u_image0Location = gl.getUniformLocation(program, "u_image0")
+      matrixLocation = gl.getUniformLocation(program, "u_matrix")
+      disFactorLocation = gl.getUniformLocation(program, "disFactor")
+
+      var positionBuffer = gl.createBuffer()
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+      setRectangle(gl, 0, 0, gl.canvas.width, gl.canvas.height)
+
+      var texcoordBuffer = gl.createBuffer()
+      gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer)
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        // prettier-ignore
+        new Float32Array([
+          0.0,0.0,
+          1.0,0.0,
+          0.0,1.0,
+          0.0,1.0,
+          1.0,0.0,
+          1.0,1.0,
+        ]),
+        gl.STATIC_DRAW
+      )
+
+      var textures = []
+      for (let i = 0; i < images.length; i++) {
+        const image = images[i]
+        let texture = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, texture)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+        // prettier-ignore
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
+        textures.push(texture)
+      }
+
+      webglUtils.resizeCanvasToDisplaySize(gl.canvas)
+      gl.viewport(0, 0, gl.canvas.width, gl.canvas.height)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      gl.useProgram(program)
+      gl.enableVertexAttribArray(positionLocation)
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+      var size = 2 // 2 components per iteration
+      var type = gl.FLOAT // the data is 32bit floats
+      var normalize = false // don't normalize the data
+      var stride = 0 // 0 = move forward size * sizeof(type) each iteration to get the next position
+      var offset = 0 // start at the beginning of the buffer
+      gl.vertexAttribPointer(
+        positionLocation,
+        size,
+        type,
+        normalize,
+        stride,
+        offset
+      )
+
+      gl.enableVertexAttribArray(texcoordLocation)
+      gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer)
+      var size = 2 // 2 components per iteration
+      var type = gl.FLOAT // the data is 32bit floats
+      var normalize = false // don't normalize the data
+      var stride = 0 // 0 = move forward size * sizeof(type) each iteration to get the next position
+      var offset = 0 // start at the beginning of the buffer
+      gl.vertexAttribPointer(
+        texcoordLocation,
+        size,
+        type,
+        normalize,
+        stride,
+        offset
+      )
+
+      var matrix = m4.orthographic(
+        0,
+        gl.canvas.clientWidth,
+        gl.canvas.clientHeight,
+        0,
+        400,
+        -400
+      )
+      gl.uniformMatrix4fv(matrixLocation, false, matrix)
+
+      for (let i = 0; i < images.length; i++) {
+        gl.uniform1i(u_imagesLocations[i], i) // texture unit 0
+        gl.activeTexture(gl.TEXTURE0 + i)
+        gl.bindTexture(gl.TEXTURE_2D, textures[i])
+      }
+
+      function render() {
+        gl.uniform1f(disFactorLocation, mc.value)
+
+        var primitiveType = gl.TRIANGLES
+        var offset = 0
+        var count = 6
+        gl.drawArrays(primitiveType, offset, count)
+        requestAnimationFrame(render)
+      }
+      render()
+    }
+
+    function setRectangle(gl, x, y, width, height) {
+      var x1 = x
+      var x2 = x + width
+      var y1 = y
+      var y2 = y + height
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([x1, y1, x2, y1, x1, y2, x1, y2, x2, y1, x2, y2]),
+        gl.STATIC_DRAW
+      )
+    }
+
+    main()
+
+    // This is needed if the images are not on the same domain
+    // NOTE: The server providing the images must give CORS permissions
+    // in order to be able to use the image with WebGL. Most sites
+    // do NOT give permission.
+    // See: https://webglfundamentals.org/webgl/lessons/webgl-cors-permission.html
+    function requestCORSIfNotSameOrigin(img, url) {
+      if (
+        new URL(url, window.location.href).origin !== window.location.origin
+      ) {
+        img.crossOrigin = ""
+      }
+    }
+
+    let changeBtn = document.querySelector(".change-button")
+    var mc = { value: 0.0 }
+    let animate = false
+    changeBtn.addEventListener("click", function (e) {
+      if (animate) {
+        return
+      }
+      let v = mc.value === 1 ? 0 : 1
+      animate = true
+      TweenLite.to(mc, 2, {
+        value: v,
+        ease: "Expo.easeInOut",
+        onComplete: function () {
+          animate = false
+        },
+      })
+    })
+  </script>
+</html>
