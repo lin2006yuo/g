@@ -8,5 +8,5 @@ inspired by [alone](https://codepen.io/ge1doot/pen/ooomdy)
 inspired by [Slider](https://codepen.io/ashthornton/pen/KRQbMO)  
 寡妇太好看了
 
-# [noise](https://g-weld.vercel.app/slider/index.html)
+# [noise](https://g-weld.vercel.app/noise/index.html)
 噪声
