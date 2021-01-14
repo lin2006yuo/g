@@ -7,3 +7,6 @@ inspired by [alone](https://codepen.io/ge1doot/pen/ooomdy)
 ## [slider](https://g-weld.vercel.app/slider/index.html)
 inspired by [Slider](https://codepen.io/ashthornton/pen/KRQbMO)  
 寡妇太好看了
+
+# [noise](https://g-weld.vercel.app/slider/index.html)
+噪声
