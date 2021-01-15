@@ -148,6 +148,7 @@
         gl.deleteProgram(program);
         return null;
     }
+    console.log(gl.getProgramInfoLog(program))
     return program;
   }
 
