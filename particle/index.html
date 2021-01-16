@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script id="shader-fs" type="x-shader/x-fragment">
+      #ifdef GL_ES
+        precision highp float;
+        #endif
+      void main(void) {
+       gl_FragColor = vec4(0.2, 0.3, 0.4, 1.0);
+      }
+    </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+      attribute vec3 vertexPosition;
+
+      uniform mat4 modelViewMatrix;
+      uniform mat4 perspectiveMatrix;
+
+      void main(void) {
+      gl_Position = perspectiveMatrix * modelViewMatrix * vec4(  vertexPosition, 1.0);
+      }
+    </script>
+
+    <canvas id="c"></canvas>
+
+    <h1 style="color: #fff">Scroll or Click on the window!</h1>
+    <footer id="main-footer">
+      <div>
+        <span id="follow-text">Follow me on</span>
+        <div class="footer-wrapper">
+          <div id="footer-container">
+            <div id="box_top">
+              <a href="" id="box_top_text" target="_blank">sample3</a>
+            </div>
+            <div id="box_front">
+              <a href="" id="box_front_text" target="_blank">sample2</a>
+            </div>
+            <div id="box_bottom">
+              <a href="" id="box_bottom_text" target="_blank">sample1</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+  <script src="../utils/webgl-utils.js"></script>
+  <script src="../utils/m4.js"></script>
+
+  <script>
+    window.cancelRequestAnimFrame = (function () {
+      return (
+        window.cancelAnimationFrame ||
+        window.webkitCancelRequestAnimationFrame ||
+        window.mozCancelRequestAnimationFrame ||
+        window.oCancelRequestAnimationFrame ||
+        window.msCancelRequestAnimationFrame ||
+        clearTimeout
+      )
+    })()
+
+    var canvas,
+      gl,
+      ratio,
+      cw,
+      ch,
+      colorLoc,
+      drawType,
+      numLines = 100000
+    var target = []
+    var id
+    var isScroll = false
+
+    var imageURLArr = ["./img/facebook.png"]
+    var snsNameArr = [
+      "Facebook",
+      "Google+",
+      "Instagram",
+      "Pinterest",
+      "Twitter",
+      "GitHub",
+    ]
+    var myLinkAccount = ["https://www.facebook.com/kenjiSpecial"]
+
+    var perspectiveMatrix
+    var randomTargetXArr = [],
+      randomTargetYArr = []
+    drawType = 0
+    var count = 0
+
+    var footerDom = document.getElementById("main-footer")
+    var footerContainer = document.getElementById("footer-container")
+    var boxTopDom = document.getElementById("box_top_text")
+    var boxFrontDom = document.getElementById("box_front_text")
+    var boxBottomDom = document.getElementById("box_bottom_text")
+
+    window.onload = init()
+
+    function init() {
+      var canvas = document.createElement("canvas")
+      var ctx = canvas.getContext("2d")
+
+      for (var ii = 0; ii < imageURLArr.length; ii++) {
+        var image = new Image()
+        image.crossOrigin = "Anonymous"
+        image.src = imageURLArr[ii]
+
+        image.onload = onLoadImageHandler.bind(this, image, canvas, ctx, ii)
+      }
+    }
+
+    function onLoadImageHandler(image, canvas, ctx, number) {
+      //console.log(image);
+      var size = image.width
+      canvas.width = size
+      canvas.height = size
+
+      ctx.drawImage(image, 0, 0)
+      var imageData = ctx.getImageData(0, 0, size, size)
+
+      var data = imageData.data
+      target[number] = []
+
+      for (var ii = 0; ii < data.length; ii += 4) {
+        if (data[ii] == 0) {
+          var pixNumber = ii / 4
+          var xPos = pixNumber % size
+          var yPos = parseInt(pixNumber / size)
+          var pos = { x: xPos / size - 0.5, y: -yPos / size + 0.5 }
+          target[number].push(pos)
+        }
+      }
+
+      count++
+
+      if (count == imageURLArr.length) {
+        loadScene()
+      }
+    }
+
+    /**
+     * Initialises WebGL and creates the 3D scene.
+     */
+    function loadScene() {
+      canvas = document.getElementById("c")
+      gl = canvas.getContext("webgl")
+
+      if (!gl) {
+        alert("There's no WebGL context available.")
+        return
+      }
+
+      cw = window.innerWidth
+      ch = window.innerHeight
+      canvas.width = cw
+      canvas.height = ch
+      gl.viewport(0, 0, canvas.width, canvas.height)
+
+      var program = webglUtils.createProgramFromScripts(gl, [
+        "shader-vs",
+        "shader-fs",
+      ])
+
+      gl.useProgram(program)
+      var vertexPosition = gl.getAttribLocation(program, "vertexPosition")
+      gl.enableVertexAttribArray(vertexPosition)
+      gl.clearColor(0.0, 0.0, 0.0, 1.0)
+      gl.clearDepth(1.0)
+
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
+
+      var vertexBuffer = gl.createBuffer()
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
+
+      // ------------------
+
+      setup()
+
+      // ------------------
+
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
+
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+      var fieldOfView = 30.0
+      var aspectRatio = canvas.width / canvas.height
+      var nearPlane = 1.0
+      var farPlane = 1000.0
+      var top = nearPlane * Math.tan((fieldOfView * Math.PI) / 360.0)
+      var bottom = -top
+      var right = top * aspectRatio
+      var left = -right
+
+      var a = (right + left) / (right - left)
+      var b = (top + bottom) / (top - bottom)
+      var c = (farPlane + nearPlane) / (farPlane - nearPlane)
+      var d = (2 * farPlane * nearPlane) / (farPlane - nearPlane)
+      var x = (2 * nearPlane) / (right - left)
+      var y = (2 * nearPlane) / (top - bottom)
+      perspectiveMatrix = [x, 0, a, 0, 0, y, b, 0, 0, 0, c, d, 0, 0, -1, 0]
+
+      console.log(perspectiveMatrix)
+
+      function degToRad(d) {
+        return (d * Math.PI) / 180
+      }
+      var fieldOfViewRadians = degToRad(100)
+      var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight
+      var projectionMatrix = m4.perspective(fieldOfViewRadians, aspect, 1, 2000)
+      var target = [0, 0, 0]
+      var up = [0, 1, 0]
+      var cameraPosition = [0, 0, 1]
+      var cameraMatrix = m4.lookAt(cameraPosition, target, up)
+      var viewMatrix = m4.inverse(cameraMatrix)
+      var viewProjectionMatrix = m4.multiply(projectionMatrix, viewMatrix)
+      var modelViewMatrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+      var vertexPosAttribLocation = gl.getAttribLocation(
+        program,
+        "vertexPosition"
+      )
+      gl.vertexAttribPointer(
+        vertexPosAttribLocation,
+        3.0,
+        gl.FLOAT,
+        false,
+        0,
+        0
+      )
+
+      var uModelViewMatrix = gl.getUniformLocation(program, "modelViewMatrix")
+      var uPerspectiveMatrix = gl.getUniformLocation(
+        program,
+        "perspectiveMatrix"
+      )
+      gl.uniformMatrix4fv(
+        uModelViewMatrix,
+        false,
+        new Float32Array(modelViewMatrix)
+      )
+      gl.uniformMatrix4fv(
+        uPerspectiveMatrix,
+        false,
+        new Float32Array(perspectiveMatrix)
+      )
+      animate()
+
+      window.addEventListener("mousewheel", onScrollEventHandler)
+      window.addEventListener("DOMMouseScroll", onScrollEventHandler)
+
+      window.addEventListener("resize", onResizeHandler)
+    }
+    var count = 0
+    var cn = 0
+
+    function animate() {
+      id = requestAnimationFrame(animate)
+      // setInterval(() => {
+      //   animate()
+      // }, 1000);
+      drawScene()
+    }
+
+    function drawScene() {
+      draw()
+
+      gl.lineWidth(1)
+      gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
+
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+      gl.drawArrays(gl.LINES, 0, numLines)
+
+      gl.flush()
+    }
+
+    // ===================================
+    var coefficient = 0.4
+    var targetCoefficient = 0.01
+
+    var vertices,
+      velocities,
+      freqArr,
+      thetaArr,
+      velThetaArr,
+      velRadArr,
+      boldRateArr
+
+    // -------------------------------
+
+    function setup() {
+      vertices = []
+
+      // -------------------------------
+      for (var ii = 0; ii < numLines; ii++) {
+        vertices.push(0, 0, 1.83)
+        vertices.push(0, 0, 1.83)
+
+        var randomPos =
+          target[drawType][parseInt(target[drawType].length * Math.random())]
+        randomTargetXArr.push(randomPos.x)
+        randomTargetYArr.push(randomPos.y)
+      }
+
+      vertices = new Float32Array(vertices)
+      randomTargetXArr = new Float32Array(randomTargetXArr)
+      randomTargetYArr = new Float32Array(randomTargetYArr)
+      console.log({vertices})
+    }
+    
+
+    // -------------------------------
+
+    // -------------------------------
+
+    function draw() {
+      cn += 0.1
+
+      var i,
+        n = vertices.length,
+        p,
+        bp
+      var px, py
+      var pTheta
+      var rad
+      var num
+
+      coefficient += (targetCoefficient - coefficient) * 0.1
+      for (i = 0; i < numLines * 1; i += 2) {
+        count += 0.3
+        bp = i * 3
+        // copy old positions
+
+        vertices[bp] = vertices[bp + 3]
+        vertices[bp + 1] = vertices[bp + 4]
+
+        num = parseInt(i / 2)
+
+        var targetPosX = randomTargetXArr[num]
+        var targetPosY = randomTargetYArr[num]
+        //va
+        px = vertices[bp + 3]
+        px +=
+          (targetPosX - px) * coefficient + (Math.random() - 0.5) * coefficient
+        vertices[bp + 3] = px
+
+        py = vertices[bp + 4]
+        py +=
+          (targetPosY - py) * coefficient + (Math.random() - 0.5) * coefficient
+        vertices[bp + 4] = py
+      }
+    }
+
+    // -------------------------------
+
+    function onScrollEventHandler(event) {
+      if (isScroll) return
+      var delta = event.wheelDelta
+      var rotate
+      var tansY
+
+      isScroll = true
+      if (delta < 0) {
+        drawType -= 1
+        if (drawType < 0) drawType += imageURLArr.length
+        rotate = -90
+        transY = 15
+      } else {
+        drawType = (drawType + 1) % imageURLArr.length
+        rotate = 90
+        transY = -15
+      }
+
+      coefficient = 0.3
+      randomTargetXArr = []
+      randomTargetYArr = []
+
+      // -------------------------------
+
+      for (var ii = 0; ii < numLines; ii++) {
+        var randomPos =
+          target[drawType][parseInt(target[drawType].length * Math.random())]
+        randomTargetXArr.push(randomPos.x)
+        randomTargetYArr.push(randomPos.y)
+      }
+
+      vertices = new Float32Array(vertices)
+      randomTargetXArr = new Float32Array(randomTargetXArr)
+      randomTargetYArr = new Float32Array(randomTargetYArr)
+
+      TweenLite.to(footerContainer, 0.3, {
+        rotationX: rotate,
+        y: transY,
+        ease: Back.easeOut,
+        onComplete: onTweenCompleteHandler,
+      })
+
+      setTimeout(function () {
+        isScroll = false
+      }, 600)
+    }
+
+    function onTweenCompleteHandler(arguments) {
+      setText()
+
+      TweenLite.set(footerContainer, { rotationX: 0, y: 0 })
+    }
+
+    function onResizeHandler(event) {
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
+    }
+
+    window.addEventListener("keypress", function (event) {
+      if (event.charCode == 99) {
+        cancelRequestAnimFrame(id)
+      }
+    })
+
+    window.addEventListener("click", function (event) {
+      if (isScroll) return
+      var rotate
+      var tansY
+
+      isScroll = true
+      drawType = (drawType + 1) % imageURLArr.length
+      rotate = 90
+      transY = -15
+
+      coefficient = 0.3
+      randomTargetXArr = []
+      randomTargetYArr = []
+
+      // -------------------------------
+
+      for (var ii = 0; ii < numLines; ii++) {
+        var randomPos =
+          target[drawType][parseInt(target[drawType].length * Math.random())]
+        randomTargetXArr.push(randomPos.x)
+        randomTargetYArr.push(randomPos.y)
+      }
+
+      vertices = new Float32Array(vertices)
+      randomTargetXArr = new Float32Array(randomTargetXArr)
+      randomTargetYArr = new Float32Array(randomTargetYArr)
+
+      TweenLite.to(footerContainer, 0.3, {
+        rotationX: rotate,
+        y: transY,
+        ease: Back.easeOut,
+        onComplete: onTweenCompleteHandler,
+      })
+
+      setTimeout(function () {
+        isScroll = false
+      }, 600)
+    })
+  </script>
+</html>
